@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AI Product Management Copilot v3</title>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, system-ui, sans-serif; background: #07111f; color: #eaf2f8; }
+    body { margin: 0; } main { width: min(960px, calc(100% - 32px)); margin: 0 auto; padding: 64px 0; }
+    header { padding: 36px; border: 1px solid #29455f; border-radius: 24px; background: #0d1d2c; }
+    .eyebrow { color: #72e2d1; text-transform: uppercase; letter-spacing: .12em; font-weight: 800; }
+    h1 { margin: 8px 0; font-size: clamp(2.2rem, 7vw, 4.6rem); line-height: 1; }
+    .status { margin-top: 24px; padding: 14px; border: 1px solid #35546d; border-radius: 12px; }
+    .status[data-state="error"] { border-color: #bd6068; } button { padding: 8px 12px; }
+    ol { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; padding: 0; list-style: none; }
+    li { padding: 22px; min-height: 120px; border: 1px solid #29455f; border-radius: 16px; background: #0b1927; }
+    code { color: #72e2d1; } @media (max-width: 700px) { ol { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <p class="eyebrow">Minimal local boundary</p>
+    <h1>AI Product Management Copilot v3</h1>
+    <p>Traceable product-decision proposal boundary. This is deliberately not a claim of production completeness.</p>
+    <div id="status" class="status" data-state="loading" role="status">Loading service status…</div>
+    <button id="retry" type="button" hidden>Retry</button>
+  </header>
+  <section>
+    <h2>Supported boundary</h2>
+    <ol><li><strong>01</strong><h3>Link source evidence</h3></li><li><strong>02</strong><h3>Propose an outcome decision</h3></li><li><strong>03</strong><h3>Approve before external execution</h3></li></ol>
+    <p>Draft API: <code>POST /api/decisions</code>. Provider integrations, durable storage, authorization, and production execution remain intentionally unimplemented.</p>
+  </section>
+</main>
+<script>
+  const status = document.getElementById('status');
+  const retry = document.getElementById('retry');
+  async function check() {
+    status.dataset.state = 'loading'; status.textContent = 'Loading service status…'; retry.hidden = true;
+    try {
+      const response = await fetch('/api/health');
+      if (!response.ok) throw new Error('Health check returned HTTP ' + response.status);
+      status.dataset.state = 'ready'; status.textContent = 'Local API boundary is ready.';
+    } catch (error) {
+      status.dataset.state = 'error'; status.textContent = 'Service unavailable: ' + error.message; retry.hidden = false;
+    }
+  }
+  retry.addEventListener('click', check); check();
+</script>
+</body>
+</html>
+
