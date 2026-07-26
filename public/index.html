@@ -12,13 +12,30 @@
     h1 { margin: 8px 0; font-size: clamp(2.2rem, 7vw, 4.6rem); line-height: 1; }
     .status { margin-top: 24px; padding: 14px; border: 1px solid #35546d; border-radius: 12px; }
     .status[data-state="error"] { border-color: #bd6068; } button { padding: 8px 12px; }
+    .login-shell { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+    .login-card { width: min(460px, 100%); display: grid; gap: 16px; padding: 34px; border: 1px solid #29455f; border-radius: 22px; background: #0d1d2c; box-shadow: 0 24px 80px #0008; }
+    .login-card h1 { font-size: clamp(2rem, 7vw, 3rem); }
+    .login-card label { display: grid; gap: 7px; color: #bfd0de; font-weight: 700; }
+    .login-card input { border: 1px solid #35546d; border-radius: 10px; padding: 12px; background: #07111f; color: #eaf2f8; font: inherit; }
+    .login-card button { border: 0; border-radius: 10px; padding: 12px; font-weight: 800; cursor: pointer; }
+    #fill-demo { background: #72e2d1; color: #07111f; } #sign-in { background: #eaf2f8; color: #07111f; }
+    #login-error { color: #ffd3d7; background: #451b23; border: 1px solid #bd6068; border-radius: 10px; padding: 11px; }
     ol { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; padding: 0; list-style: none; }
     li { padding: 22px; min-height: 120px; border: 1px solid #29455f; border-radius: 16px; background: #0b1927; }
     code { color: #72e2d1; } @media (max-width: 700px) { ol { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
-<main>
+<section id="login" class="login-shell">
+  <form id="login-form" class="login-card">
+    <p class="eyebrow">AI Product Management Copilot v3</p><h1>Sign in to your product workspace</h1>
+    <p>Use the provisioned local account to continue.</p><p id="login-error" role="alert" hidden></p>
+    <label>Email<input id="email" type="email" autocomplete="username" required /></label>
+    <label>Password<input id="password" type="password" autocomplete="current-password" required /></label>
+    <button id="fill-demo" type="button">Auto Fill Demo Credentials</button><button id="sign-in" type="submit">Sign In</button>
+  </form>
+</section>
+<main id="app" hidden>
   <header>
     <p class="eyebrow">Minimal local boundary</p>
     <h1>AI Product Management Copilot v3</h1>
@@ -35,6 +52,12 @@
 <script>
   const status = document.getElementById('status');
   const retry = document.getElementById('retry');
+  const login = document.getElementById('login'); const app = document.getElementById('app'); const errorBox = document.getElementById('login-error'); const email = document.getElementById('email'); const password = document.getElementById('password');
+  const authHeaders = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('pm_token') || ''}` });
+  async function fillDemoCredentials() { errorBox.hidden = true; const response = await fetch('/api/auth/demo-credentials'); const body = await response.json(); if (!response.ok) throw new Error(body.error || 'Demo credentials are unavailable'); email.value = body.email; password.value = body.password; }
+  async function verifySession() { const response = await fetch('/api/auth/me', { headers: authHeaders() }); if (!response.ok) throw new Error('Session is not authenticated'); login.hidden = true; app.hidden = false; check(); }
+  document.getElementById('fill-demo').addEventListener('click', () => fillDemoCredentials().catch((error) => { errorBox.textContent = error.message; errorBox.hidden = false; }));
+  document.getElementById('login-form').addEventListener('submit', async (event) => { event.preventDefault(); errorBox.hidden = true; try { const response = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email.value, password: password.value }) }); const body = await response.json(); if (!response.ok || !body.token) throw new Error(body.error || 'Login failed'); localStorage.setItem('pm_token', body.token); await verifySession(); } catch (error) { localStorage.removeItem('pm_token'); errorBox.textContent = error.message; errorBox.hidden = false; } });
   async function check() {
     status.dataset.state = 'loading'; status.textContent = 'Loading service status…'; retry.hidden = true;
     try {
@@ -45,8 +68,8 @@
       status.dataset.state = 'error'; status.textContent = 'Service unavailable: ' + error.message; retry.hidden = false;
     }
   }
-  retry.addEventListener('click', check); check();
+  retry.addEventListener('click', check);
+  if (localStorage.getItem('pm_token')) verifySession().catch(() => localStorage.removeItem('pm_token'));
 </script>
 </body>
 </html>
-

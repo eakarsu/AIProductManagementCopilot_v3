@@ -114,6 +114,14 @@ export function createApp() {
       if (req.method === 'GET' && url.pathname === '/api/health') {
         return json(res, 200, { status: 'ok', service: 'product-management-copilot-v3' });
       }
+      if (req.method === 'GET' && url.pathname === '/api/auth/demo-credentials') {
+        if (process.env.NODE_ENV === 'production') return json(res, 404, { error: 'not found' });
+        const email = process.env.DEMO_EMAIL || process.env.PROVISION_ADMIN_EMAIL;
+        const password = process.env.DEMO_PASSWORD || process.env.PROVISION_ADMIN_PASSWORD;
+        return email && password
+          ? json(res, 200, { email, password })
+          : json(res, 503, { error: 'Demo credentials are not configured' });
+      }
       if (req.method === 'POST' && url.pathname === '/api/auth/login') {
         const body = await readJson(req);
         const row = await sql("SELECT id, email, name, role, password_hash FROM runtime_pm_users WHERE lower(email)=lower(:'email') LIMIT 1", { email: String(body.email || '') });
@@ -177,6 +185,17 @@ export function createUiApp() {
     if (req.method === 'GET' && (req.url === '/' || req.url === '/index.html')) {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       return res.end(await readFile(indexPath));
+    }
+    if (req.url?.startsWith('/api/')) {
+      const body = ['GET', 'HEAD'].includes(req.method || 'GET') ? undefined : await readJson(req);
+      const upstream = await fetch(`http://127.0.0.1:${process.env.BACKEND_PORT}${req.url}`, {
+        method: req.method,
+        headers: { 'Content-Type': 'application/json', Authorization: req.headers.authorization || '' },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+      const content = await upstream.text();
+      res.writeHead(upstream.status, { 'Content-Type': upstream.headers.get('content-type') || 'application/json; charset=utf-8' });
+      return res.end(content);
     }
     return json(res, 404, { error: 'not found' });
   });
