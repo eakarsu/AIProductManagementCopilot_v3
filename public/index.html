@@ -34,14 +34,14 @@
     @media(max-width:800px){#app{grid-template-columns:1fr}#app .codex-side{position:relative;max-height:280px}}
   </style>
 </head>
-<body>
+<body><nav><a href="/ai-workspace">AI workspace</a></nav>
 <section id="login" class="login-shell">
   <form id="login-form" class="login-card">
     <p class="eyebrow">AI Product Management Copilot v3</p><h1>Sign in to your product workspace</h1>
     <p>Use the provisioned local account to continue.</p><p id="login-error" role="alert" hidden></p>
     <label>Email<input id="email" type="email" autocomplete="username" required /></label>
     <label>Password<input id="password" type="password" autocomplete="current-password" required /></label>
-    <button id="fill-demo" type="button">Auto Fill Demo Credentials</button><button id="sign-in" type="submit">Sign In</button>
+    <button id="fill-demo" type="button">Log In as Demo</button><button id="sign-in" type="submit">Sign In</button>
   </form>
 </section>
 <main id="app" hidden><aside class="codex-side" aria-label="Application navigation"><strong>Product Management Copilot v3</strong><span>Workspace</span><label for="codex-side-search">Find a section</label><input id="codex-side-search" type="search" placeholder="Search navigation"><nav aria-label="Sections"><a href="#codex-section-overview">Overview</a><a href="#codex-section-1">Link source evidence</a><a href="#codex-section-2">Propose an outcome decision</a><a href="#codex-section-3">Approve before external execution</a></nav></aside><div class="workspace-body">
@@ -69,7 +69,7 @@
   const authHeaders = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('pm_token') || ''}` });
   async function fillDemoCredentials() { errorBox.hidden = true; const response = await fetch('/api/auth/demo-credentials'); const body = await response.json(); if (!response.ok) throw new Error(body.error || 'Demo credentials are unavailable'); email.value = body.email; password.value = body.password; }
   async function verifySession() { const response = await fetch('/api/auth/me', { headers: authHeaders() }); if (!response.ok) throw new Error('Session is not authenticated'); login.hidden = true; app.hidden = false; check(); }
-  document.getElementById('fill-demo').addEventListener('click', () => fillDemoCredentials().catch((error) => { errorBox.textContent = error.message; errorBox.hidden = false; }));
+  document.getElementById('fill-demo').addEventListener('click', () => fillDemoCredentials().then(() => document.getElementById('login-form').requestSubmit()).catch((error) => { errorBox.textContent = error.message; errorBox.hidden = false; }));
   document.getElementById('login-form').addEventListener('submit', async (event) => { event.preventDefault(); errorBox.hidden = true; try { const response = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email.value, password: password.value }) }); const body = await response.json(); if (!response.ok || !body.token) throw new Error(body.error || 'Login failed'); localStorage.setItem('pm_token', body.token); await verifySession(); } catch (error) { localStorage.removeItem('pm_token'); errorBox.textContent = error.message; errorBox.hidden = false; } });
   async function check() {
     status.dataset.state = 'loading'; status.textContent = 'Loading service status…'; retry.hidden = true;

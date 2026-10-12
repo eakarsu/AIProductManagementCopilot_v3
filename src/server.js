@@ -1,3 +1,4 @@
+import {serveNativePromptConsole} from './serveNativePromptConsole.mjs';
 import { createServer } from 'node:http';
 import { realpathSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
@@ -110,6 +111,7 @@ export function createDraft(body) {
 export function createApp() {
   return createServer(async (req, res) => {
     try {
+      if(req.method==='GET'&&new URL(req.url,'http://localhost').pathname==='/ai-workspace')return serveNativePromptConsole(res);
       const url = new URL(req.url, 'http://localhost');
       if (req.method === 'GET' && url.pathname === '/api/health') {
         return json(res, 200, { status: 'ok', service: 'product-management-copilot-v3' });
@@ -163,8 +165,8 @@ export function createApp() {
       if (req.method === 'GET' && url.pathname === '/api/ai/history') {
         const identity = verifyToken(req);
         if (!identity) return json(res, 401, { error: 'authentication required' });
-        const count = await sql("SELECT count(*) FROM runtime_pm_ai_results WHERE user_id=:'user_id'::uuid", { user_id: identity.sub });
-        return json(res, 200, { total: Number(count || 0) });
+        const rows = await sql("SELECT row_to_json(report) FROM (SELECT id, prompt, result_text AS content, model, created_at FROM runtime_pm_ai_results WHERE user_id=:'user_id'::uuid ORDER BY created_at DESC LIMIT 50) report", { user_id: identity.sub });
+        return json(res, 200, { history: rows ? rows.split('\n').map(row => JSON.parse(row)) : [] });
       }
       if (req.method === 'POST' && url.pathname === '/api/decisions') {
         const body = await readJson(req);
@@ -182,20 +184,31 @@ export function createApp() {
 
 export function createUiApp() {
   return createServer(async (req, res) => {
+    if(req.method==='GET'&&req.url === '/ai-workspace')return serveNativePromptConsole(res);
     if (req.method === 'GET' && (req.url === '/' || req.url === '/index.html')) {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       return res.end(await readFile(indexPath));
     }
     if (req.url?.startsWith('/api/')) {
-      const body = ['GET', 'HEAD'].includes(req.method || 'GET') ? undefined : await readJson(req);
-      const upstream = await fetch(`http://127.0.0.1:${process.env.BACKEND_PORT}${req.url}`, {
-        method: req.method,
-        headers: { 'Content-Type': 'application/json', Authorization: req.headers.authorization || '' },
-        body: body === undefined ? undefined : JSON.stringify(body),
-      });
-      const content = await upstream.text();
-      res.writeHead(upstream.status, { 'Content-Type': upstream.headers.get('content-type') || 'application/json; charset=utf-8' });
-      return res.end(content);
+      const nativeProxyAbort = new AbortController();
+      const interrupted = () => nativeProxyAbort.abort();
+      const closed = () => { if(!res.writableEnded)interrupted(); };
+      req.once('aborted',interrupted);res.once('close',closed);
+      try {
+        const body = ['GET', 'HEAD'].includes(req.method || 'GET') ? undefined : await readJson(req);
+        const upstream = await fetch(`http://127.0.0.1:${process.env.BACKEND_PORT}${req.url}`, {
+          method: req.method, signal:nativeProxyAbort.signal,
+          headers: { 'Content-Type': 'application/json', Authorization: req.headers.authorization || '' },
+          body: body === undefined ? undefined : JSON.stringify(body),
+        });
+        const content = await upstream.text();
+        if(res.destroyed||nativeProxyAbort.signal.aborted)return;
+        res.writeHead(upstream.status, { 'Content-Type': upstream.headers.get('content-type') || 'application/json; charset=utf-8' });
+        return res.end(content);
+      } catch(error) {
+        if(!res.destroyed&&!nativeProxyAbort.signal.aborted)json(res,error instanceof SyntaxError?400:502,{error:'Native API unavailable'});
+        return;
+      } finally { req.removeListener('aborted',interrupted);res.removeListener('close',closed); }
     }
     return json(res, 404, { error: 'not found' });
   });
